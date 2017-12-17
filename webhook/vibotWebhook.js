@@ -14,9 +14,6 @@
 'use strict';
 const _ = require('lodash');
 const http = require('http');
-const geocoder = require('geocoder');
-const host = 'api.worldweatheronline.com';
-const wwoApiKey = 'bff161e6b7eb404284672138171610';
 const MongoClient = require('mongodb').MongoClient;
 const URL = 'mongodb://root:123@ds157682.mlab.com/57682/alexa';
 
@@ -164,63 +161,40 @@ let vibotWebhook = function(req, res) {
               }));
             })
           })
-          .catch(error => response.status(500).send('Something wrong\n' + error));
+          .catch(error => res.status(500).send('Something wrong\n' + error));
       } else if (req.body.originalRequest.data.postback.title == "Chi tiết cấu hình") {
-        var payload = {
-          "facebook": {
-            "attachment": {
-              "type": "template",
-              "payload": {
-                "template_type": "generic",
-                "elements": []
-              }
-            }
-          }
-        };
-        // Read fullTechInfo, get all subtitles and write to string in our format
-        function get_fullTechInfo_str(tech_info) {
-          var str = "";
-          for (var key in tech_info) {
-            if (tech_info.hasOwnProperty(key)) {
-              str += '\n';
-              str += key + ": ";
-              if ((JSON.stringify(tech_info[key]).match(/{.*}/) != null) == true) { // If this object is JSON
-                str += get_fullTechInfo_str(tech_info[key]);
-                str += '\n';
-              } else { // Not JSON
-                str += JSON.stringify(tech_info[key]);
-              }
-            }
-          }
-          return str;
-        }
-        //select
         selectById(Number(req.body.originalRequest.data.postback.payload))
           .then(record => {
-            if (record.fullTechInfo) {
-              var fullTechInfo = record.fullTechInfo;
-              // Split subtitles
-              var subtitles = "";
-              subtitles = get_fullTechInfo_str(fullTechInfo)
-              subtitles = subtitles.replace(/[\[\]\"\{\}]/g, "");
-              subtitles = subtitles.split('\n\n');
+            let fullTechInfo = record.fullTechInfo
+            if (!fullTechInfo) return []
 
-              // Replace the subtitles to payload'subtitles
-              var elements = payload['facebook']['attachment']['payload']['elements'];
+            let elements = Object.keys(fullTechInfo).map(key => {
+              let elem = fullTechInfo[key]
+              let subItem = Object.keys(elem)
+              let a = subItem.map(elemKey => {
+                return elemKey + ': ' + elem[elemKey]
+              })
 
-              for (let i = 0; i < subtitles.length; i++) {
-                // elements[i] = {
-                //   'title': "Chi tiết kĩ thuật"
-                // };
-                elements[i] = {
-                  'subtitle': subtitles[i]
-                };
+              return {
+                title: key,
+                subtitle: a.join('\n')
               }
-            } else {
-              payload = {};
-            }
-            payload = JSON.stringify(payload).replace(/\n/g, " ");
-            console.log("Payload returned: " + JSON.stringify(payload));
+            })
+
+            var payload = {
+              "facebook": {
+                "attachment": {
+                  "type": "template",
+                  "payload": {
+                    "template_type": "generic",
+                    "top_element_style": "LARGE",
+                    "elements": elements
+                  }
+                }
+              }
+            };
+
+            console.log("Payload return: " + payload);
 
             res.setHeader('Content-Type', 'application/json');
             res.send(JSON.stringify({
@@ -239,9 +213,9 @@ let vibotWebhook = function(req, res) {
           })
       }
     }
-
   }
 }
+
 
 let selectData = function(itemName, itemColor, itemNew,
   URI = 'mongodb://reader:123@ds157682.mlab.com:57682/alexa', DB = 'alexa', COLLECTION = 'zdb') {
